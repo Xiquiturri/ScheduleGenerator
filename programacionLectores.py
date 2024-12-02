@@ -1,11 +1,15 @@
-import datetime
+from datetime import datetime,timedelta
 import random
 import pandas as pd
 import json
 import locale
 from datetime import date 
 from collections import deque
+import os
+from Modelos.evento import evento
 
+#path 
+event_metadata_relative_path=os.path.join("Metadata","event_metadata.csv")
 # Set the locale to Spanish 
 locale.setlocale(locale.LC_TIME, 'es_ES')
 
@@ -24,8 +28,7 @@ class Lector:
 
     def agregar_preferencia(self, dia, momento):
         if dia not in self.preferencias:
-            self.preferencias[dia] = []
-        self.preferencias[dia].append(momento)
+            self.preferencias[dia] = momento
 
     def agregar_fecha_no_disponible(self, fecha):
         self.fechas_no_disponibles.append(fecha)
@@ -35,8 +38,9 @@ class Lector:
 
 class GestionLectores:
     def __init__(self):
-        self.lectores = {}
+        self.lectores = []
         self.lectores_to_save={}
+        self.df_metadata = pd.read_csv(event_metadata_relative_path)
     
     def save_lectores_to_json(self, file_path):
         # Convert lectores to a serializable format
@@ -48,12 +52,13 @@ class GestionLectores:
     def load_lectores_from_json(self, file_path):
         with open(file_path, 'r') as json_file:
             lectores_data = json.load(json_file)
-        self.lectores = {}
+        self.lectores = []
         for nombre, data in lectores_data.items():
             lector = Lector(nombre)
             lector.preferencias = data['preferencias']
-            lector.fechas_no_disponibles = [datetime.fromisoformat(fecha).date() for fecha in data['fechas_no_disponibles']]
-            self.lectores[nombre] = lector
+            lector.fechas_no_disponibles = [datetime.strptime(fecha, '%Y-%m-%d').date() for fecha in data['fechas_no_disponibles']]
+            #self.lectores[nombre] = lector
+            self.lectores.append(lector)
 
 
 
@@ -66,23 +71,19 @@ class GestionLectores:
             self.lectores_to_save[nombre] = Lector(nombre)
 
     def ingresar_preferencias(self):
-        dias_validos = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
-        momentos_validos = ['mañana', 'tarde', 'noche','funeral']
-
+        momentos_validos = self.df_metadata.iloc[:,:2] #selecciona dia y hora
         for lector in self.lectores_to_save.values():
-            print(f"\nPreferencias para {lector.nombre}:")
-            while True:
-                dia = input(f"  Ingresa el día de la semana para {lector.nombre} (o 'fin' para terminar): ").capitalize()
-                if dia.lower() == 'fin':
-                    break
-                if dia in dias_validos:
-                    momento = input(f"  Ingresa el momento del día para {dia} (mañana, tarde, noche): ").lower()
-                    if momento in momentos_validos:
-                        lector.agregar_preferencia(dia, momento)
-                    else:
-                        print("  Momento del día incorrecto. Usa 'mañana', 'tarde','funeral' o 'noche'.")
-                else:
-                    print("  Día de la semana incorrecto. Usa un día válido (Lunes, Martes, etc.).")
+            print(momentos_validos) #opciones de dias y horarios 
+            preferencias = input(lector.nombre + " Selecciona tus preferencias(ej:1,2,3) o 'fin para terminar: ")
+            if preferencias =='fin':
+                continue
+            preferencias_list = [int(x) for x in preferencias.split(",")]
+            for preferencia in preferencias_list:
+                dia = momentos_validos['Dia'][preferencia]
+                hora = pd.to_datetime(momentos_validos['Hora'][preferencia]).strftime("%H:%M:%S")
+                lector.agregar_preferencia(dia,hora)
+                print(hora)
+
 
     def ingresar_fechas_no_disponibles(self):
         for lector in self.lectores_to_save.values():
@@ -91,7 +92,7 @@ class GestionLectores:
                 fecha = input("  Ingresa la fecha (YYYY-MM-DD) o 'fin' para terminar: ")
                 if fecha.lower() == 'fin':
                     break
-                lector.agregar_fecha_no_disponible(datetime.datetime.strptime(fecha, '%Y-%m-%d').date())
+                lector.agregar_fecha_no_disponible(datetime.strptime(fecha, '%Y-%m-%d').date())
     
     def eventos_completos(self,horarios, current_date):
         dia_semana = current_date.strftime('%A')
@@ -117,87 +118,91 @@ class GestionLectores:
     def generar_horarios(self, start_date, end_date):
 
 
-        horarios = {}
-        delta = datetime.timedelta(days=1)
+        horarios = []
+        delta = timedelta(days=1)
         current_date = start_date
 
         while current_date <= end_date:
             dia_semana = current_date.strftime('%A')
-            if dia_semana == "lunes" or dia_semana == "sábado":
-                horarios[current_date] = {'funeral': [], 'noche': []}
-            elif dia_semana in ["martes", "miércoles", "viernes"]:
-                horarios[current_date] = {'mañana': [], 'funeral': [], 'noche': []}
-            elif dia_semana == "jueves":
-                horarios[current_date] = {'mañana': [], 'funeral': []}
-            elif dia_semana == "domingo":
-                horarios[current_date] = {'mañana': [], 'tarde': [], 'funeral': [], 'noche': []}
-            current_date += delta
+            # Filter rows where 'Dia' matches dia_semana
+            matching_rows = self.df_metadata[self.df_metadata['Dia'] == dia_semana]
+            # Iterate over matching rows and append information to horarios
+            for _, row in matching_rows.iterrows():
+                horarios.append(evento(
+                    current_date,
+                    {dia_semana: row['Hora']},
+                    row['Cupo'],
+                    row['Default'],
+                    row['Obligado']
+                ))
+
+
+            current_date+=delta
+               
+           
+            #if dia_semana == "lunes" or dia_semana == "sábado":
+             #   horarios[current_date] = {'funeral': [], 'noche': []}
+            #elif dia_semana in ["martes", "miércoles", "viernes"]:
+             #   horarios[current_date] = {'mañana': [], 'funeral': [], 'noche': []}
+            #elif dia_semana == "jueves":
+             #   horarios[current_date] = {'mañana': [], 'funeral': []}
+            #elif dia_semana == "domingo":
+             #   horarios[current_date] = {'mañana': [], 'tarde': [], 'funeral': [], 'noche': []} 
 
         # Convert list of lectores to deque
-        lectores = deque(self.lectores.values())
+        lectores = deque(self.lectores)
 
+        random.shuffle(horarios)
         # Ensure each lector appears at least once
         for lector in list(lectores):
-            assigned = False
-            while not assigned:
-                random_date = random.choice(list(horarios.keys()))
-                random_event = random.choice(list(horarios[random_date].keys()))
-                dia_semana_random = random_date.strftime('%A')
-                if random_event != 'funeral' and len(horarios[random_date][random_event]) < 2 and dia_semana_random != 'domingo' and self.has_preference(lector, random_event, dia_semana_random) and not self.is_in_date(lector, horarios[random_date]):
-                    horarios[random_date][random_event].append(lector.nombre)
-                    assigned = True
-                elif random_event != 'funeral' and len(horarios[random_date][random_event]) < 4 and dia_semana_random == 'domingo' and random_event == 'tarde' and self.has_preference(lector, random_event, dia_semana_random) and not self.is_in_date(lector, horarios[random_date]):
-                    horarios[random_date][random_event].append(lector.nombre)
-                    assigned = True
-                elif random_event != 'funeral' and len(horarios[random_date][random_event]) < 3 and dia_semana_random == 'domingo' and self.has_preference(lector, random_event, dia_semana_random) and not self.is_in_date(lector, horarios[random_date]):
-                    horarios[random_date][random_event].append(lector.nombre)
-                    assigned = True
-                elif not lector.preferencias and random_event != 'funeral':
-                    if len(horarios[random_date][random_event]) < 2 and dia_semana_random != 'domingo' and dia_semana_random != 'sábado':
-                        horarios[random_date][random_event].append(lector.nombre)
-                        assigned = True
-                    elif len(horarios[random_date][random_event]) < 4 and dia_semana_random == 'domingo' and random_event == 'tarde':
-                        horarios[random_date][random_event].append(lector.nombre)
-                        assigned = True
-                    elif len(horarios[random_date][random_event]) < 3 and dia_semana_random == 'domingo':
-                        horarios[random_date][random_event].append(lector.nombre)
-                        assigned = True
+            lista_preferencias = list(lector.preferencias)
+            random.shuffle(lista_preferencias)
+            asignado = False
+            while not asignado:
+                for _evento in horarios:
+                    for pref in lista_preferencias:
+                        value = lector.preferencias[pref]
+                        momento = {pref:value}
+                        #verificar que los dias y horas correspondan del schedule y la preferencia
+                        if (_evento.momento == momento and lector not in _evento.participante and len(_evento.participante)< _evento.cupo and pd.isna(_evento.obligado)and pd.isna(_evento.default)) or not lector.preferencias:
+                            _evento.participante.add(lector)
+                            asignado = True
+                            break
+                    if (lector not in _evento.participante and len(_evento.participante)< _evento.cupo and pd.isna(_evento.obligado)and pd.isna(_evento.default)) and not lector.preferencias:
+                        _evento.participante.add(lector)
+                        asignado = True
+                    if(asignado):
+                        break
+
+
             lectores.rotate(-1)  # Move the lector to the end of the queue
 
         current_date = start_date
-        eventos_completos = False
         while current_date <= end_date:
             dia_semana = current_date.strftime('%A')
 
             for lector in list(lectores):
                 if current_date not in lector.fechas_no_disponibles:
                     if dia_semana in lector.preferencias:
-                        eventos_completos = False
                         preferencia = list(lector.preferencias[dia_semana])
                         random.shuffle(preferencia)
 
                         if len(horarios[current_date][preferencia[0]]) < 4 and dia_semana == "domingo" and preferencia[0] == 'tarde' and not self.is_in_date(lector, horarios[current_date]):
                             horarios[current_date][preferencia[0]].append(lector.nombre)
-                            eventos_completos = False
                         elif len(horarios[current_date][preferencia[0]]) < 3 and dia_semana == "domingo" and not self.is_in_date(lector, horarios[current_date]):
                             horarios[current_date][preferencia[0]].append(lector.nombre)
-                            eventos_completos = False
                         elif len(horarios[current_date][preferencia[0]]) < 2 and dia_semana != "domingo" and not self.is_in_date(lector, horarios[current_date]):
                             horarios[current_date][preferencia[0]].append(lector.nombre)
-                            eventos_completos = False
                     if not lector.preferencias:
                         momentos_validos = ['mañana', 'tarde', 'noche']
                         random.shuffle(momentos_validos)
                         if momentos_validos[0] in horarios[current_date] and dia_semana != 'sábado':
                             if len(horarios[current_date][momentos_validos[0]]) < 4 and dia_semana == "domingo" and momentos_validos[0] == 'tarde' and not self.is_in_date(lector, horarios[current_date]):
                                 horarios[current_date][momentos_validos[0]].append(lector.nombre)
-                                eventos_completos = False
                             elif len(horarios[current_date][momentos_validos[0]]) < 3 and dia_semana == "domingo" and not self.is_in_date(lector, horarios[current_date]):
                                 horarios[current_date][momentos_validos[0]].append(lector.nombre)
-                                eventos_completos = False
                             elif len(horarios[current_date][momentos_validos[0]]) < 2 and dia_semana != "domingo" and not self.is_in_date(lector, horarios[current_date]):
                                 horarios[current_date][momentos_validos[0]].append(lector.nombre)
-                                eventos_completos = False
                     
                     if "noche" in horarios[current_date] and dia_semana == "sábado":
                         if len(horarios[current_date]["noche"]) < 3:
@@ -276,7 +281,7 @@ class GestionLectores:
 # Ejecución
 gestion = GestionLectores()
 
-""" while True:
+while True:
     add_lectores=input("Desea agregar lectores? si o no -> ")
     if(add_lectores.lower()=="si"):
         gestion.ingresar_lectores()
@@ -285,15 +290,15 @@ gestion = GestionLectores()
         gestion.save_lectores_to_json("lectores_db.json")
         break
     elif(add_lectores.lower()=="no"):
-        break """
+        break
 
 gestion.load_lectores_from_json("lectores_db.json")
 
 #start_date = datetime.datetime.strptime(input("Ingresa la fecha de inicio (YYYY-MM-DD): "), '%Y-%m-%d').date()
 #end_date = datetime.datetime.strptime(input("Ingresa la fecha de fin (YYYY-MM-DD): "), '%Y-%m-%d').date()
 
-start_date = datetime.datetime.strptime("2024-12-02", '%Y-%m-%d').date()
-end_date = datetime.datetime.strptime("2024-12-08", '%Y-%m-%d').date()
+start_date = datetime.strptime("2024-12-02", '%Y-%m-%d').date()
+end_date = datetime.strptime("2024-12-08", '%Y-%m-%d').date()
 
 horarios = gestion.generar_horarios(start_date, end_date)
 #horarios_asignados = gestion.asignar_lectores(horarios)
