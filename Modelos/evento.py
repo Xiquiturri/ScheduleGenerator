@@ -33,6 +33,10 @@ class evento:
     @property
     def participante(self):
         return self._participante
+    
+    @property
+    def vacio(self):
+        return len(self._participante) < self._cupo
 
 
 
