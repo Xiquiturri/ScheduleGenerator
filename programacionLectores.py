@@ -179,34 +179,47 @@ class GestionLectores:
             for participante in _evento.participante:
                 nombres_participantes.append(participante.nombre)
             print(f"Para {_evento.momento}, los participantes son: {nombres_participantes}")
-        return horarios
+        
+        #print("Horarios generados: ", horarios) # Verificar contenido de horarios 
+        return horarios  #horarios tiene la lista de todos los eventos
 
-    def generar_tabla(self, horarios):
+    def generar_tabla(self, horarios): 
         data = {'Fecha': [], 'Mañana': [],'Funeral':[], 'Tarde': [], 'Noche': []}
-        for fecha in sorted(horarios.keys()):
-            data['Fecha'].append(fecha.strftime('%Y-%m-%d'))
-            if 'mañana' in horarios[fecha]:
-                data['Mañana'].append(', '.join(horarios[fecha]['mañana'])) 
-            else: 
-                data['Mañana'].append('NA')
-            if 'tarde' in horarios[fecha]:
-                data['Tarde'].append(', '.join(horarios[fecha]['tarde']))
-            else:
-                data['Tarde'].append('NA')
-            if 'noche' in horarios[fecha]:
-                data['Noche'].append(', '.join(horarios[fecha]['noche']))
-            else:
+        for evento in horarios:
+            fecha = evento.fecha.strftime('%Y-%m-%d')
+            dia = list(evento.momento.keys())[0] #funeral, domingo...
+            horario = evento.momento[dia] #08:00:00 ...
+            participantes = ', '.join([p.nombre for p in evento.participante])
+
+            # Asegurarse de que la fecha esté en los eventos, si no hay misa en algun horario pone NA 
+            if fecha not in data['Fecha']: 
+                data['Fecha'].append(fecha) 
+                data['Mañana'].append('NA') 
+                data['Funeral'].append('NA') 
+                data['Tarde'].append('NA') 
                 data['Noche'].append('NA')
-            if 'funeral' in horarios[fecha]:
-                data['Funeral'].append(', '.join(horarios[fecha]['funeral']))
-            else:
-                data['Funeral'].append('NA')
+
+            # Encontrar el índice de la fecha de los eventos
+            fecha_index = data['Fecha'].index(fecha)
+
+            # Asignar los participantes al evento adecuado por horario
+            if horario == '08:00:00' or horario == '07:00:00': 
+                data['Mañana'][fecha_index] = participantes 
+            elif horario == '15:00:00': 
+                data['Funeral'][fecha_index] = participantes 
+            elif horario == '12:30:00': 
+                data['Tarde'][fecha_index] = participantes 
+            elif horario == '18:00:00': 
+                data['Noche'][fecha_index] = participantes
+
+        # Crear un DataFrame y exportar a CSV 
+        df = pd.DataFrame(data) 
+        df.to_csv('output.csv', index=False) 
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None): 
+            print(df.to_string(index=False))   
 
         
-        df = pd.DataFrame(data)
-        df.to_csv('output.csv', index=False)
-        with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # Ensure the full table is printed
-            print(df.to_string(index=False))
+        
 
 # Ejecución
 gestion = GestionLectores()
@@ -231,5 +244,4 @@ start_date = datetime.strptime("2024-12-16", '%Y-%m-%d').date()
 end_date = datetime.strptime("2024-12-22", '%Y-%m-%d').date()
 
 horarios = gestion.generar_horarios(start_date, end_date)
-#horarios_asignados = gestion.asignar_lectores(horarios)
-#gestion.generar_tabla(horarios)
+gestion.generar_tabla(horarios)
