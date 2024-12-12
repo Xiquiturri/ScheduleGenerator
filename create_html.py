@@ -47,7 +47,7 @@ html = f"""
         table {{
             margin: 0 auto;
             border-collapse: collapse;
-            border: 2px;
+            border: black 2px solid;
         }}
         #tablaLecturas{{
             border-collapse: collapse;
@@ -58,18 +58,12 @@ html = f"""
             width: 20%;
         }}
         th, td {{
-            border: 1px solid #ddd;
+            border: black 2px solid;
             padding: 8px;
         }}
         th {{
             background-color: #87CEEB;
             color: white;
-        }}
-        tr:nth-child(even) {{
-            background-color: #f2f2f2;
-        }}
-        tr:hover {{
-            background-color: #ddd;
         }}
         td {{
             text-align: center;
@@ -122,29 +116,6 @@ for index, row in df.iterrows():
                 rows_by_day[day_name].append((hora, "2a lectura", personas[2]))
             if len(personas) > 3:
                 rows_by_day[day_name].append((hora, "Monitor", personas[3]))
-    
-
-# Generar el HTML con rowspan
-""" for day_name, tasks in rows_by_day.items():
-    rowspan = len(tasks)
-    #first_task = tasks[0]
-    html += f"<tr><td rowspan='{rowspan}'>{day_name}</td>"
-    unique_element = tasks[0][0]
-    unique_elements_counter=[]
-    counter = 0
-    for task in tasks:
-        if(task[0] != unique_element):
-            unique_element = task[0]
-            unique_elements_counter.append(counter)
-            counter=0
-        counter+=1
-    
-
-    # Añadir la primera fila con rowspan para el primer y segundo elementos
-    html += f"<td rowspan='{rowspan}'>{first_task[0]}</td><td>{first_task[1]}</td><td>{first_task[2]}</td></tr>"
-     # Añadir las filas restantes sin incluir el primer elemento en el rowspan 
-    for task in tasks[1:]:
-        html += f"<tr><td>{task[1]}</td><td>{task[2]}</td></tr>" """
 
 # Generar el HTML con rowspan
 for day_name, tasks in rows_by_day.items():
@@ -163,7 +134,7 @@ for day_name, tasks in rows_by_day.items():
         counter += 1
     unique_elements_counter.append(counter)  # Añadir el último contador
 
-    html += f"<tr><td rowspan='{rowspan}'>{day_name}</td>"
+    html += f"<tr><td style='background-color: #b3d1fe'; rowspan='{rowspan}'>{day_name}</td>"
 
     unique_element_aux = 0
     for unique_element in unique_elements_counter:
