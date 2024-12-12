@@ -47,6 +47,7 @@ html = f"""
         table {{
             margin: 0 auto;
             border-collapse: collapse;
+            border: 2px;
         }}
         #tablaLecturas{{
             border-collapse: collapse;
@@ -84,42 +85,99 @@ html = f"""
 """
 
 # Poblar la tabla
+from collections import defaultdict
+# Crear un diccionario para agrupar las filas por día
+rows_by_day = defaultdict(list)
+
+# Agrupar las filas por día
 for index, row in df.iterrows():
     day_name = get_day_name(row["Fecha"])
     if pd.notna(row["Mañana"]):
         personas = row["Mañana"].split(", ")
         if len(personas) >= 2:
-            if day_name == "Domingo":
-                hora = "7 AM"
-            else:
-                hora = "8 AM"
-            html += f"<tr><td rowspan='{len(personas)}'>{day_name}</td><td rowspan='{len(personas)}'>{hora}</td><td>1ra lectura</td><td>{personas[0]}</td></tr>"
-            html += f"<tr><td>Salmo</td><td>{personas[1]}</td></tr>"
+            hora = "7 AM" if day_name == "Domingo" else "8 AM"
+            rows_by_day[day_name].append((hora, "1ra lectura", personas[0]))
+            rows_by_day[day_name].append((hora, "Salmo", personas[1]))
             if len(personas) > 2:
-                html += f"<tr><td>2a lectura</td><td>{personas[2]}</td></tr>"
+                rows_by_day[day_name].append((hora, "2a lectura", personas[2]))
             if len(personas) > 3:
-                html += f"<tr><td>Monitor</td><td>{personas[3]}</td></tr>"
-    
+                rows_by_day[day_name].append((hora, "Monitor", personas[3]))
     if day_name == "Domingo" and pd.notna(row["Tarde"]):
         personas = row["Tarde"].split(", ")
         if len(personas) >= 2:
             hora = "12:30 PM"
-            html += f"<tr><td rowspan='{len(personas)}'>{day_name}</td><td rowspan='{len(personas)}'>{hora}</td><td>1ra lectura</td><td>{personas[0]}</td></tr>"
-            html += f"<tr><td>Salmo</td><td>{personas[1]}</td></tr>"
+            rows_by_day[day_name].append((hora, "1ra lectura", personas[0]))
+            rows_by_day[day_name].append((hora, "Salmo", personas[1]))
             if len(personas) > 2:
-                html += f"<tr><td>2a lectura</td><td>{personas[2]}</td></tr>"
+                rows_by_day[day_name].append((hora, "2a lectura", personas[2]))
             if len(personas) > 3:
-                html += f"<tr><td>Monitor</td><td>{personas[3]}</td></tr>"
+                rows_by_day[day_name].append((hora, "Monitor", personas[3]))
     if pd.notna(row["Noche"]):
         personas = row["Noche"].split(", ")
         if len(personas) >= 2:
             hora = "6 PM"
-            html += f"<tr><td rowspan='{len(personas)}'>{day_name}</td><td rowspan='{len(personas)}'>{hora}</td><td>1ra lectura</td><td>{personas[0]}</td></tr>"
-            html += f"<tr><td>Salmo</td><td>{personas[1]}</td></tr>"
+            rows_by_day[day_name].append((hora, "1ra lectura", personas[0]))
+            rows_by_day[day_name].append((hora, "Salmo", personas[1]))
             if len(personas) > 2:
-                html += f"<tr><td>2a lectura</td><td>{personas[2]}</td></tr>"
+                rows_by_day[day_name].append((hora, "2a lectura", personas[2]))
             if len(personas) > 3:
-                html += f"<tr><td>Monitor</td><td>{personas[3]}</td></tr>"
+                rows_by_day[day_name].append((hora, "Monitor", personas[3]))
+    
+
+# Generar el HTML con rowspan
+""" for day_name, tasks in rows_by_day.items():
+    rowspan = len(tasks)
+    #first_task = tasks[0]
+    html += f"<tr><td rowspan='{rowspan}'>{day_name}</td>"
+    unique_element = tasks[0][0]
+    unique_elements_counter=[]
+    counter = 0
+    for task in tasks:
+        if(task[0] != unique_element):
+            unique_element = task[0]
+            unique_elements_counter.append(counter)
+            counter=0
+        counter+=1
+    
+
+    # Añadir la primera fila con rowspan para el primer y segundo elementos
+    html += f"<td rowspan='{rowspan}'>{first_task[0]}</td><td>{first_task[1]}</td><td>{first_task[2]}</td></tr>"
+     # Añadir las filas restantes sin incluir el primer elemento en el rowspan 
+    for task in tasks[1:]:
+        html += f"<tr><td>{task[1]}</td><td>{task[2]}</td></tr>" """
+
+# Generar el HTML con rowspan
+for day_name, tasks in rows_by_day.items():
+    rowspan = len(tasks)
+    first_task = tasks[0]
+    unique_element_aux = tasks[0][0]
+    unique_elements_counter = []
+    counter = 0
+
+    # Contar elementos únicos y sus frecuencias
+    for task in tasks:
+        if task[0] != unique_element_aux:
+            unique_element_aux = task[0]
+            unique_elements_counter.append(counter)
+            counter = 0
+        counter += 1
+    unique_elements_counter.append(counter)  # Añadir el último contador
+
+    html += f"<tr><td rowspan='{rowspan}'>{day_name}</td>"
+
+    unique_element_aux = 0
+    for unique_element in unique_elements_counter:
+        # Añadir la celda con rowspan para la hora
+        html += f"<td rowspan='{unique_element}'>{tasks[unique_element_aux][0]}</td>"
+
+        # Añadir las celdas para las personas
+        for i in range(unique_element_aux, unique_element_aux + unique_element):
+            task = tasks[i]
+            if i == unique_element_aux:
+                html += f"<td>{task[1]}</td><td>{task[2]}</td></tr>"
+            else:
+                html += f"<tr><td>{task[1]}</td><td>{task[2]}</td></tr>"
+        unique_element_aux += unique_element
 
 html += "</table>"
 
@@ -134,7 +192,7 @@ html += """
 for index, row in df.iterrows():
     day_name = row["Day_Name"]
     if pd.notna(row["Funeral"]):
-        html += f"<tr><td style='background-color: #87CEEB'>{day_name}</td><td>{row['Funeral']}</td></tr>"
+        html += f"<tr><td style='background-color: #b3d1fe'>{day_name}</td><td>{row['Funeral']}</td></tr>"
 html +="</table>"
 
 
