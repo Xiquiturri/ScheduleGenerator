@@ -181,47 +181,35 @@ class GestionLectores:
             print(f"Para {_evento.momento}, los participantes son: {nombres_participantes}")
         
         #print("Horarios generados: ", horarios) # Verificar contenido de horarios 
-        return horarios  #horarios tiene la lista de todos los eventos
+        return horarios # tiene la lista de todos los eventos
 
     def generar_tabla(self, horarios): 
-        data = {'Fecha': [], 'Mañana': [],'Funeral':[], 'Tarde': [], 'Noche': []}
+        # Crear una lista para almacenar los datos de la tabla 
+        data =[]
+
+        #Iterar sobre los eventos 
         for evento in horarios:
-            fecha = evento.fecha.strftime('%Y-%m-%d')
-            dia = list(evento.momento.keys())[0] #funeral, domingo...
-            horario = evento.momento[dia] #08:00:00 ...
-            participantes = ', '.join([p.nombre for p in evento.participante])
-
-            # Asegurarse de que la fecha esté en los eventos, si no hay misa en algun horario pone NA 
-            if fecha not in data['Fecha']: 
-                data['Fecha'].append(fecha) 
-                data['Mañana'].append('NA') 
-                data['Funeral'].append('NA') 
-                data['Tarde'].append('NA') 
-                data['Noche'].append('NA')
-
-            # Encontrar el índice de la fecha de los eventos
-            fecha_index = data['Fecha'].index(fecha)
-
-            # Asignar los participantes al evento adecuado por horario
-            if horario == '08:00:00' or horario == '07:00:00': 
-                data['Mañana'][fecha_index] = participantes 
-            elif horario == '15:00:00': 
-                data['Funeral'][fecha_index] = participantes 
-            elif horario == '12:30:00': 
-                data['Tarde'][fecha_index] = participantes 
-            elif horario == '18:00:00': 
-                data['Noche'][fecha_index] = participantes
-
-        # Crear un DataFrame y exportar a CSV 
-        df = pd.DataFrame(data) 
+           #dia_semana = evento.fecha.strftime('%A').lower()
+            for persona in evento.participante:
+                for dia, hora in evento.momento.items():
+                    fila=[
+                        evento.fecha,
+                        dia,
+                        hora,
+                        evento.cupo,
+                        evento.default,
+                        evento.obligado,
+                        persona.nombre
+                    ]
+                    data.append(fila)
+        
+        #Creación del CSV 
+        df = pd.DataFrame(data,columns=["Fecha","Día", "Hora", "Cupo", "Default", "Obligado","Persona"])
         df.to_csv('output.csv', index=False) 
-        with pd.option_context('display.max_rows', None, 'display.max_columns', None): 
-            print(df.to_string(index=False))   
-
-        
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None): print(df.to_string(index=False))
         
 
-# Ejecución
+# ------------------------Ejecución------------------------------
 gestion = GestionLectores()
 
 while True:

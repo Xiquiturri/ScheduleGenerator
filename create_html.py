@@ -5,12 +5,6 @@ from programacionLectores import start_date,end_date
 # Leer el archivo CSV
 df = pd.read_csv('output.csv')
 
-# Función para obtener el nombre del día en español
-def get_day_name(date_str):
-    days = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-    return days[date_obj.weekday()]
-
 # Función para convertir el formato de la fecha 
 def convertir_fechas(start_date, end_date): 
     # Formatear las fechas a la representación escrita 
@@ -19,13 +13,39 @@ def convertir_fechas(start_date, end_date):
     # Devolver la cadena en el formato 
     return f"{start_date_str} al {end_date_str}"
 
-#Ordenar el DF 
-df['Day_Name'] = df['Fecha'].apply(get_day_name)
-days_order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-df['Day_Order'] = df['Day_Name'].apply(lambda x: days_order.index(x))
-df = df.sort_values(by=['Day_Order', 'Fecha']).reset_index(drop=True)
+def convertir_a_12_horas(tiempo_24_horas):
+    # Convertir la cadena de entrada en un objeto datetime
+    tiempo_obj = datetime.strptime(tiempo_24_horas, "%H:%M:%S")
+    # Verificar y agregar AM/PM manualmente si es necesario
+    if tiempo_obj.hour < 12:
+        periodo = "AM"
+    else:
+        periodo = "PM"
+    # Convertir el objeto datetime en el formato de 12 horas
+    tiempo_12_horas = tiempo_obj.strftime("%I:%M")
+    return f"{tiempo_12_horas.lstrip('0')} {periodo}"
 
-# Generar HTML
+
+# --------Ordenar por dias de la semana y horas----------------------
+days_order = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+# Obtener los valores únicos de eventos obligados excluyendo valores vacíos 
+eventos_obligados = df['Obligado'].dropna().unique() 
+days_order.extend(eventos_obligados) #Actualizar la lista
+
+df['Hour_order'] = df['Hora'].apply(lambda x: datetime.strptime(x, '%H:%M:%S').time())
+df['Day_Order'] = df['Día'].apply(lambda x: days_order.index(x))
+
+# Crear una columna para el orden de los eventos obligados 
+df['Obligado_Order'] = df.apply(lambda row: row['Fecha'] if pd.notna(row['Obligado']) and row['Obligado'] != pd.notnull else '', axis=1)
+
+# Ordenar el DataFrame primero por el orden de los días y luego por la hora 
+df = df.sort_values(by=['Day_Order', 'Hour_order', 'Obligado_Order']).reset_index(drop=True)
+df.drop(columns=['Hour_order', 'Day_Order', 'Obligado_Order'], inplace=True)
+
+
+
+# ------------Generar HTML-------------------------------------
 html = f"""
 <!DOCTYPE html>
 <html lang="es">
@@ -78,46 +98,38 @@ html = f"""
     <table id="tablaLecturas">
 """
 
-# Poblar la tabla
-from collections import defaultdict
-# Crear un diccionario para agrupar las filas por día
-rows_by_day = defaultdict(list)
+# ---------------------Poblar la tabla LECTORES
+elements_by_day = {}
+lectura =["1ra lectura","Salmo","2a lectura","Monitor"]
 
-# Agrupar las filas por día
-for index, row in df.iterrows():
-    day_name = get_day_name(row["Fecha"])
-    if pd.notna(row["Mañana"]):
-        personas = row["Mañana"].split(", ")
-        if len(personas) >= 2:
-            hora = "7 AM" if day_name == "Domingo" else "8 AM"
-            rows_by_day[day_name].append((hora, "1ra lectura", personas[0]))
-            rows_by_day[day_name].append((hora, "Salmo", personas[1]))
-            if len(personas) > 2:
-                rows_by_day[day_name].append((hora, "2a lectura", personas[2]))
-            if len(personas) > 3:
-                rows_by_day[day_name].append((hora, "Monitor", personas[3]))
-    if day_name == "Domingo" and pd.notna(row["Tarde"]):
-        personas = row["Tarde"].split(", ")
-        if len(personas) >= 2:
-            hora = "12:30 PM"
-            rows_by_day[day_name].append((hora, "1ra lectura", personas[0]))
-            rows_by_day[day_name].append((hora, "Salmo", personas[1]))
-            if len(personas) > 2:
-                rows_by_day[day_name].append((hora, "2a lectura", personas[2]))
-            if len(personas) > 3:
-                rows_by_day[day_name].append((hora, "Monitor", personas[3]))
-    if pd.notna(row["Noche"]):
-        personas = row["Noche"].split(", ")
-        if len(personas) >= 2:
-            hora = "6 PM"
-            rows_by_day[day_name].append((hora, "1ra lectura", personas[0]))
-            rows_by_day[day_name].append((hora, "Salmo", personas[1]))
-            if len(personas) > 2:
-                rows_by_day[day_name].append((hora, "2a lectura", personas[2]))
-            if len(personas) > 3:
-                rows_by_day[day_name].append((hora, "Monitor", personas[3]))
+# Agrupar los datos por día 
+for index, row in df.iterrows(): 
+    day_name = row["Día"] 
+    if day_name not in elements_by_day: 
+        elements_by_day[day_name] = [] # Se añade una nueva entrada con ese día como clave y una lista vacía como valor 
+    elements_by_day[day_name].append((row["Hora"], row["Persona"])) 
 
-# Generar el HTML con rowspan
+# Asignación de la lectura por persona 
+rows_by_day = {} 
+
+for day, details in elements_by_day.items(): 
+    if day.lower() == row["Obligado"]: 
+        continue
+    if day not in rows_by_day: 
+        rows_by_day[day] = [] 
+    personas_por_dia = {} 
+    for hour, persona in details: 
+        if hour not in personas_por_dia: 
+            personas_por_dia[hour] = [] 
+        personas_por_dia[hour].append(persona) 
+
+    for hour, personas in personas_por_dia.items(): 
+        for i, persona in enumerate(personas): 
+                rows_by_day[day].append((hour, lectura[i], persona)) 
+            
+
+
+#-----------------------Tabla------------------------------
 for day_name, tasks in rows_by_day.items():
     rowspan = len(tasks)
     first_task = tasks[0]
@@ -139,7 +151,7 @@ for day_name, tasks in rows_by_day.items():
     unique_element_aux = 0
     for unique_element in unique_elements_counter:
         # Añadir la celda con rowspan para la hora
-        html += f"<td rowspan='{unique_element}'>{tasks[unique_element_aux][0]}</td>"
+        html += f"<td rowspan='{unique_element}'>{convertir_a_12_horas(tasks[unique_element_aux][0])}</td>"
 
         # Añadir las celdas para las personas
         for i in range(unique_element_aux, unique_element_aux + unique_element):
@@ -161,9 +173,11 @@ html += """
 """
 # Poblar la tabla de funerales
 for index, row in df.iterrows():
-    day_name = row["Day_Name"]
-    if pd.notna(row["Funeral"]):
-        html += f"<tr><td style='background-color: #b3d1fe'>{day_name}</td><td>{row['Funeral']}</td></tr>"
+    # Convertir la cadena de fecha a un objeto datetime 
+    fecha_obj = datetime.strptime(row['Fecha'], '%Y-%m-%d')
+    day_name = fecha_obj.strftime("%A")
+    if pd.notna(row["Obligado"]):
+        html += f"<tr><td style='background-color: #b3d1fe'>{day_name}</td><td>{row['Persona']}</td></tr>"
 html +="</table>"
 
 
